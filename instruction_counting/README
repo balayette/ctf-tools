@@ -1,0 +1,5 @@
+Easy instruction counting with QEMU, both in both user and system modes.
+Build the patched QEMU, symbolic link it to ./patched_qemu
+Supports i386/x86_64 userspace QEMU, and all architectures of system QEMU.
+
+gdbcount.py does instruction counting with gdb, patch it to suit your needs.
