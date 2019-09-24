@@ -11,6 +11,21 @@ def make_proc(binname, dfilter, seen, stdin):
         return f"echo '{seen}' | ./patched_qemu -d instrc {dfilter} {binname} > /dev/null"
     return f"./patched_qemu -d instrc {dfilter} {binname} '{seen}' > /dev/null"
 
+def guess(binname, dfilter, length, stdin):
+    m = 0
+    mi = 0
+    for i in range(1, length + 1):
+        payload = "a" * i
+        print(f'\rTrying {i} ', end="")
+        proc = make_proc(binname, dfilter, payload, stdin)
+        com = subprocess.run([proc], shell=True, capture_output=True)
+        n = int(com.stderr.decode('ascii').strip().split(' ')[-1])
+        if n > m:
+            print(f'\r[+] Current best {i} ({n})')
+            m = n
+            mi = i
+    print(f"\rGuessed input size: {mi}")
+
 def run(binname, dfilter, length, charset, stdin, r, skip_fast):
     seen = charset[0] * length
     prev = 0
@@ -42,20 +57,24 @@ def main():
 
     parser = argparse.ArgumentParser(description='Instruction counting')
     parser.add_argument('binary', help='Path to the binary')
-    parser.add_argument('--length', help='Length of the input to bruteforce', type=int, required=True)
+    parser.add_argument('--length', help='Length of the input to bruteforce, or max length to try if --guess is used.', type=int, required=True)
     parser.add_argument('--dfilter', help='Range over which to count instructions. It should start on a basic block boundary. Supports everything that -dfilter supports in QEMU.', default='')
     parser.add_argument('--stdin', help='Send input in stdin', default=False, action='store_true')
     parser.add_argument('--charset', help='Charset', default=charset, type=str)
     parser.add_argument('--reverse', help='Reverse', default=False, action='store_true')
     parser.add_argument('--skip-fast', help='Skip to the next character as soon as possible.', default=False, action='store_true')
+    parser.add_argument('--guess', help='Try to guess the size of the flag', default=False, action='store_true')
 
     args = parser.parse_args()
 
     if args.dfilter != '':
         args.dfilter = '-dfilter ' + args.dfilter
 
-    return run(args.binary, args.dfilter, args.length, args.charset, args.stdin,
+    if not args.guess:
+        run(args.binary, args.dfilter, args.length, args.charset, args.stdin,
             (args.length - 1, 0, -1) if args.reverse else (args.length,), args.skip_fast)
+    else:
+        guess(args.binary, args.dfilter, args.length, args.stdin)
 
 if __name__ == '__main__':
     main()

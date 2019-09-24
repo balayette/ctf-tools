@@ -26,7 +26,7 @@ for i in range(16):
                     "quit")
 
 
-    
+
         com = subprocess.run([
             "gdb ./binary -x instrcount | tail -n 1"],
             shell=True, capture_output=True)
