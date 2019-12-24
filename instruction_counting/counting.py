@@ -6,27 +6,34 @@ import argparse
 from multiprocessing import Pool
 
 
-def make_proc(binname, dfilter, seen, stdin):
+def make_proc(binname, dfilter, seen, stdin, perf):
+    if perf:
+        if stdin:
+            return f"echo '{seen}' | perf stat -x, -e instructions:u {binname} > /dev/null"
+        return f"perf stat -x, -e instructions:u {binname} '{seen}' > /dev/null"
     if stdin:
         return f"echo '{seen}' | ./patched_qemu -d instrc {dfilter} {binname} > /dev/null"
     return f"./patched_qemu -d instrc {dfilter} {binname} '{seen}' > /dev/null"
 
-def guess(binname, dfilter, length, stdin):
+def guess(binname, dfilter, length, stdin, perf):
     m = 0
     mi = 0
     for i in range(1, length + 1):
         payload = "a" * i
         print(f'\rTrying {i} ', end="")
-        proc = make_proc(binname, dfilter, payload, stdin)
+        proc = make_proc(binname, dfilter, payload, stdin, perf)
         com = subprocess.run([proc], shell=True, capture_output=True)
-        n = int(com.stderr.decode('ascii').strip().split(' ')[-1])
+        if perf:
+            n = int(com.stderr.decode('ascii').strip().split(',')[0])
+        else:
+            n = int(com.stderr.decode('ascii').strip().split(' ')[-1])
         if n > m:
             print(f'\r[+] Current best {i} ({n})')
             m = n
             mi = i
     print(f"\rGuessed input size: {mi}")
 
-def run(binname, dfilter, length, charset, stdin, r, skip_fast):
+def run(binname, dfilter, length, charset, stdin, r, skip_fast, perf):
     seen = charset[0] * length
     prev = 0
 
@@ -37,9 +44,12 @@ def run(binname, dfilter, length, charset, stdin, r, skip_fast):
         for c in charset:
             seen = seen[:i] + c + seen[i+1:]
             print(f'\r{seen}', end='')
-            proc = make_proc(binname, dfilter, seen, stdin)
+            proc = make_proc(binname, dfilter, seen, stdin, perf)
             com = subprocess.run([proc], shell=True, capture_output=True)
-            n = int(com.stderr.decode('ascii').strip().split(' ')[-1])
+            if perf:
+                n = int(com.stderr.decode('ascii').strip().split(',')[0])
+            else:
+                n = int(com.stderr.decode('ascii').strip().split(' ')[-1])
             if n > m:
                 print(f'\r[+] Current best {seen} ({n})')
                 m = n
@@ -64,6 +74,7 @@ def main():
     parser.add_argument('--reverse', help='Reverse', default=False, action='store_true')
     parser.add_argument('--skip-fast', help='Skip to the next character as soon as possible.', default=False, action='store_true')
     parser.add_argument('--guess', help='Try to guess the size of the flag', default=False, action='store_true')
+    parser.add_argument('--perf', help='Use perf', default=False, action="store_true")
 
     args = parser.parse_args()
 
@@ -72,9 +83,9 @@ def main():
 
     if not args.guess:
         run(args.binary, args.dfilter, args.length, args.charset, args.stdin,
-            (args.length - 1, 0, -1) if args.reverse else (args.length,), args.skip_fast)
+            (args.length - 1, 0, -1) if args.reverse else (args.length,), args.skip_fast, args.perf)
     else:
-        guess(args.binary, args.dfilter, args.length, args.stdin)
+        guess(args.binary, args.dfilter, args.length, args.stdin, args.perf)
 
 if __name__ == '__main__':
     main()
