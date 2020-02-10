@@ -1,7 +1,8 @@
 Easy instruction counting with QEMU, in both user and system mode.
 Supports i386/x86_64 userspace QEMU, and all architectures of system QEMU.
-Build the patched QEMU, symbolic link it to ./patched_qemu, and then read
-./counting.py --help
+Build the patched QEMU, symbolic link it to ./patched_qemu (see
+https://github.com/balayette/qemu) and then read ./counting.py --help
+
 Also supports perf, which is slower than QEMU, but is nice to have because
 QEMU often fails to emulate obscure binaries.
 
