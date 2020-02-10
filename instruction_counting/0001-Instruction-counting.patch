@@ -1,23 +1,14 @@
-From ef501e8969ce27d2bc588d24b849f298434d10d8 Mon Sep 17 00:00:00 2001
-From: Nicolas Manichon <nicolas.manichon@lse.epita.fr>
-Date: Mon, 23 Sep 2019 13:31:52 +0200
-Subject: [PATCH] Instruction counting
+commit fed72e7de05d95af8cffddcd53f66227083a0ee8
+Author: Nicolas Manichon <nicolas.manichon@lse.epita.fr>
+Date:   Mon Sep 23 13:31:52 2019 +0200
 
----
- accel/tcg/cpu-exec.c  | 4 ++++
- cpus.c                | 1 +
- include/hw/core/cpu.h | 2 ++
- include/qemu/log.h    | 1 +
- linux-user/syscall.c  | 4 ++++
- util/log.c            | 2 ++
- 6 files changed, 14 insertions(+)
+    Instruction counting
 
 diff --git a/accel/tcg/cpu-exec.c b/accel/tcg/cpu-exec.c
-index 48272c781b..2ff029bac8 100644
+index 2560c90eec..99a4175b81 100644
 --- a/accel/tcg/cpu-exec.c
 +++ b/accel/tcg/cpu-exec.c
-@@ -153,6 +153,10 @@ static inline tcg_target_ulong cpu_tb_exec(CPUState *cpu, TranslationBlock *itb)
-                            itb->cs_base, itb->pc, itb->flags,
+@@ -154,4 +154,8 @@ static inline tcg_target_ulong cpu_tb_exec(CPUState *cpu, TranslationBlock *itb)
                             lookup_symbol(itb->pc));
  
 +    if (unlikely(qemu_loglevel_mask(CPU_LOG_INSTR_CNT)
@@ -26,86 +17,68 @@ index 48272c781b..2ff029bac8 100644
 +
  #if defined(DEBUG_DISAS)
      if (qemu_loglevel_mask(CPU_LOG_TB_CPU)
-         && qemu_log_in_addr_range(itb->pc)) {
 diff --git a/cpus.c b/cpus.c
-index d2c61ff155..7d013cab8a 100644
+index b4f8b84b61..5085b36cb2 100644
 --- a/cpus.c
 +++ b/cpus.c
-@@ -1905,6 +1905,7 @@ void pause_all_vcpus(void)
- 
+@@ -1864,4 +1864,5 @@ void pause_all_vcpus(void)
      qemu_clock_enable(QEMU_CLOCK_VIRTUAL, false);
      CPU_FOREACH(cpu) {
 +        qemu_log_mask(CPU_LOG_INSTR_CNT, "cpu exit icount %ld\n", cpu->icount);
          if (qemu_cpu_is_self(cpu)) {
              qemu_cpu_stop(cpu, true);
-         } else {
 diff --git a/include/hw/core/cpu.h b/include/hw/core/cpu.h
-index c7cda65c66..75b2be65f6 100644
+index 73e9a869a4..36cd905f5a 100644
 --- a/include/hw/core/cpu.h
 +++ b/include/hw/core/cpu.h
-@@ -359,6 +359,8 @@ struct CPUState {
-     int nr_cores;
+@@ -354,4 +354,6 @@ struct CPUState {
      int nr_threads;
  
 +    uint64_t icount;
 +
      struct QemuThread *thread;
  #ifdef _WIN32
-     HANDLE hThread;
 diff --git a/include/qemu/log.h b/include/qemu/log.h
-index b097a6cae1..67d5071a2f 100644
+index e0f4e40628..992990a06e 100644
 --- a/include/qemu/log.h
 +++ b/include/qemu/log.h
-@@ -45,6 +45,7 @@ static inline bool qemu_log_separate(void)
- /* LOG_TRACE (1 << 15) is defined in log-for-trace.h */
- #define CPU_LOG_TB_OP_IND  (1 << 16)
+@@ -63,4 +63,5 @@ static inline bool qemu_log_separate(void)
  #define CPU_LOG_TB_FPU     (1 << 17)
-+#define CPU_LOG_INSTR_CNT  (1 << 18)
+ #define CPU_LOG_PLUGIN     (1 << 18)
++#define CPU_LOG_INSTR_CNT  (1 << 22)
  
  /* Lock output for a series of related logs.  Since this is not needed
-  * for a single qemu_log / qemu_log_mask / qemu_log_mask_and_addr, we
 diff --git a/linux-user/syscall.c b/linux-user/syscall.c
-index e2af3c1494..f9b023b3af 100644
+index d60142f069..4db32ea5ba 100644
 --- a/linux-user/syscall.c
 +++ b/linux-user/syscall.c
-@@ -7258,6 +7258,8 @@ static abi_long do_syscall1(void *cpu_env, int num, abi_long arg1,
-         if (CPU_NEXT(first_cpu)) {
+@@ -7373,4 +7373,6 @@ static abi_long do_syscall1(void *cpu_env, int num, abi_long arg1,
              TaskState *ts;
  
 +            qemu_log_mask(CPU_LOG_INSTR_CNT, "thread exit icount %ld\n", cpu->icount);
 +
              /* Remove the CPU from the list.  */
              QTAILQ_REMOVE_RCU(&cpus, cpu, node);
- 
-@@ -7277,6 +7279,7 @@ static abi_long do_syscall1(void *cpu_env, int num, abi_long arg1,
-         }
+@@ -7392,4 +7394,5 @@ static abi_long do_syscall1(void *cpu_env, int num, abi_long arg1,
  
          cpu_list_unlock();
 +        qemu_log_mask(CPU_LOG_INSTR_CNT, "application exit icount %ld\n", cpu->icount);
          preexit_cleanup(cpu_env, arg1);
          _exit(arg1);
-         return 0; /* avoid warning */
-@@ -9255,6 +9258,7 @@ static abi_long do_syscall1(void *cpu_env, int num, abi_long arg1,
-         /* new thread calls */
+@@ -9372,4 +9375,5 @@ static abi_long do_syscall1(void *cpu_env, int num, abi_long arg1,
      case TARGET_NR_exit_group:
          preexit_cleanup(cpu_env, arg1);
 +        qemu_log_mask(CPU_LOG_INSTR_CNT, "application exit icount %ld\n", cpu->icount);
          return get_errno(exit_group(arg1));
  #endif
-     case TARGET_NR_setdomainname:
 diff --git a/util/log.c b/util/log.c
-index 1d1b33f7d9..00674900e9 100644
+index 47f2827397..0960a15f06 100644
 --- a/util/log.c
 +++ b/util/log.c
-@@ -273,6 +273,8 @@ const QEMULogItem qemu_log_items[] = {
-     { CPU_LOG_TB_NOCHAIN, "nochain",
-       "do not chain compiled TBs so that \"exec\" and \"cpu\" show\n"
-       "complete traces" },
+@@ -333,4 +333,6 @@ const QEMULogItem qemu_log_items[] = {
+     { CPU_LOG_PLUGIN, "plugin", "output from TCG plugins\n"},
+ #endif
 +    { CPU_LOG_INSTR_CNT | CPU_LOG_TB_NOCHAIN, "instrc",
 +      "log count of executed instructions" },
      { 0, NULL, NULL },
  };
- 
--- 
-2.23.0
-
