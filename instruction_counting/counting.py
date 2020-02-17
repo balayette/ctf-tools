@@ -41,7 +41,22 @@ class PerfRunner(Runner):
         return f"perf stat -x, -e instructions:u {self.binname} '{payload}' > /dev/null"
 
     def ins_count(self, stderr):
-        return int(stderr.strip().split('\n')[-1].split(',')[0])
+        for l in stderr.strip().split('\n'):
+            if "instructions:u" in l:
+                return int(l.split(',')[0])
+
+class PinRunner(Runner):
+    NAME = "pin"
+
+    def make_proc(self, payload):
+        if self.stdin:
+            return f"echo '{payload}' | ./pin -t ./inscount0.so -- {self.binname} > /dev/null"
+        return f"./pin -t ./inscount0.so -- {self.binname} '{payload}' > /dev/null"
+
+    def ins_count(self, stderr):
+        with open("inscount.out", "r") as f:
+            count = int(f.readlines()[0].split(' ')[-1])
+            return count
 
 def guess(runner, length, pattern):
     m = 0
@@ -87,7 +102,7 @@ def run(runner, length, pattern, charset, r, skip_fast):
 def main():
     charset = string.ascii_letters + string.digits + '{}()_-.!?,;@/\\'
 
-    parser = argparse.ArgumentParser(description='Instruction counting')
+    parser = argparse.ArgumentParser(description='Instruction counting.')
     parser.add_argument('binary', help='Path to the binary')
     parser.add_argument('--length', help='Length of the input to bruteforce, or max length to try if --guess is used. The length is the length of the payload, EXCLUDING the flag pattern', type=int, required=True)
     parser.add_argument('--dfilter', help='Range over which to count instructions. It should start on a basic block boundary. Supports everything that -dfilter supports in QEMU.', default='')
@@ -98,7 +113,7 @@ def main():
     parser.add_argument('--guess', help='Try to guess the size of the flag', default=False, action='store_true')
     parser.add_argument('--pattern', help='Pattern of the flag, the "PATTERN" string will be replaced with the flag (CTF{PATTERN}), for example', default="PATTERN", type=str)
     parser.add_argument('--runner',
-            help='Choose runners: qemu, perf', default="qemu", type=str)
+            help='Choose runners: qemu, perf, pin', default="qemu", type=str)
 
     args = parser.parse_args()
 
@@ -109,6 +124,8 @@ def main():
         runner = QemuRunner(args.binary, args.stdin, args.dfilter)
     elif args.runner == "perf":
         runner = PerfRunner(args.binary, args.stdin)
+    elif args.runner == "pin":
+        runner = PinRunner(args.binary, args.stdin)
 
     if args.guess:
         guess(runner, args.length, args.pattern)

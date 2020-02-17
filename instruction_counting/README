@@ -6,4 +6,8 @@ https://github.com/balayette/qemu) and then read ./counting.py --help
 Also supports perf, which is slower than QEMU, but is nice to have because
 QEMU often fails to emulate obscure binaries.
 
+Also supports pin, which is even slower, but why not?
+To use pin, symlink the pin binary to ./pin, and the inscount0.so shared library
+to ./inscount0.so
+
 gdbcount.py does instruction counting with gdb, patch it to suit your needs.
