@@ -119,8 +119,6 @@ def main():
 
     runner = None
     if args.runner == "qemu":
-        if args.dfilter != '':
-            args.dfilter = '-dfilter ' + args.dfilter
         runner = QemuRunner(args.binary, args.stdin, args.dfilter)
     elif args.runner == "perf":
         runner = PerfRunner(args.binary, args.stdin)
