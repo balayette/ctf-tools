@@ -1,10 +1,9 @@
 Easy instruction counting with QEMU, in both user and system mode.
-Supports i386/x86_64 userspace QEMU, and all architectures of system QEMU.
 Build the patched QEMU, symbolic link it to ./patched_qemu (see
 https://github.com/balayette/qemu) and then read ./counting.py --help
 
-Also supports perf, which is slower than QEMU, but is nice to have because
-QEMU often fails to emulate obscure binaries.
+Also supports perf, which is less accurate than QEMU, but is nice to have
+because QEMU might fail to emulate obscure instructions.
 
 Also supports pin, which is even slower, but why not?
 To use pin, symlink the pin binary to ./pin, and the inscount0.so shared library
