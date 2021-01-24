@@ -1,84 +1,115 @@
-commit fed72e7de05d95af8cffddcd53f66227083a0ee8
-Author: Nicolas Manichon <nicolas.manichon@lse.epita.fr>
-Date:   Mon Sep 23 13:31:52 2019 +0200
+From 18be774e6b9fc9db9f5abb6479c8834cdcc5aa0d Mon Sep 17 00:00:00 2001
+From: Nicolas Manichon <nmanichon@gmail.com>
+Date: Sun, 24 Jan 2021 15:35:47 +0100
+Subject: [PATCH] Instruction counting
 
-    Instruction counting
+---
+ accel/tcg/cpu-exec.c  | 4 ++++
+ include/hw/core/cpu.h | 2 ++
+ include/qemu/log.h    | 2 ++
+ linux-user/syscall.c  | 7 +++++++
+ softmmu/cpus.c        | 1 +
+ util/log.c            | 2 ++
+ 6 files changed, 18 insertions(+)
 
 diff --git a/accel/tcg/cpu-exec.c b/accel/tcg/cpu-exec.c
-index 2560c90eec..99a4175b81 100644
+index e0df9b6a1d..d1bc85d5e9 100644
 --- a/accel/tcg/cpu-exec.c
 +++ b/accel/tcg/cpu-exec.c
-@@ -154,4 +154,8 @@ static inline tcg_target_ulong cpu_tb_exec(CPUState *cpu, TranslationBlock *itb)
+@@ -169,6 +169,10 @@ cpu_tb_exec(CPUState *cpu, TranslationBlock *itb, int *tb_exit)
+                            itb->cs_base, itb->pc, itb->flags,
                             lookup_symbol(itb->pc));
  
-+    if (unlikely(qemu_loglevel_mask(CPU_LOG_INSTR_CNT)
-+                && qemu_log_in_addr_range(itb->pc)))
-+        cpu->icount += itb->icount;
++    if (likely(qemu_loglevel_mask(CPU_LOG_INSTR_CNT) &&
++               qemu_log_in_addr_range(itb->pc)))
++      cpu->icount += itb->icount;
 +
  #if defined(DEBUG_DISAS)
      if (qemu_loglevel_mask(CPU_LOG_TB_CPU)
-diff --git a/cpus.c b/cpus.c
-index b4f8b84b61..5085b36cb2 100644
---- a/cpus.c
-+++ b/cpus.c
-@@ -1864,4 +1864,5 @@ void pause_all_vcpus(void)
-     qemu_clock_enable(QEMU_CLOCK_VIRTUAL, false);
-     CPU_FOREACH(cpu) {
-+        qemu_log_mask(CPU_LOG_INSTR_CNT, "cpu exit icount %ld\n", cpu->icount);
-         if (qemu_cpu_is_self(cpu)) {
-             qemu_cpu_stop(cpu, true);
+         && qemu_log_in_addr_range(itb->pc)) {
 diff --git a/include/hw/core/cpu.h b/include/hw/core/cpu.h
-index 73e9a869a4..36cd905f5a 100644
+index 140fa32a5e..686ea3103a 100644
 --- a/include/hw/core/cpu.h
 +++ b/include/hw/core/cpu.h
-@@ -354,4 +354,6 @@ struct CPUState {
+@@ -369,6 +369,8 @@ struct CPUState {
+     int nr_cores;
      int nr_threads;
  
 +    uint64_t icount;
 +
      struct QemuThread *thread;
  #ifdef _WIN32
+     HANDLE hThread;
 diff --git a/include/qemu/log.h b/include/qemu/log.h
-index e0f4e40628..992990a06e 100644
+index 9b80660207..1d37cd2705 100644
 --- a/include/qemu/log.h
 +++ b/include/qemu/log.h
-@@ -63,4 +63,5 @@ static inline bool qemu_log_separate(void)
- #define CPU_LOG_TB_FPU     (1 << 17)
- #define CPU_LOG_PLUGIN     (1 << 18)
-+#define CPU_LOG_INSTR_CNT  (1 << 22)
+@@ -44,6 +44,8 @@ static inline bool qemu_log_separate(void)
+     return res;
+ }
  
- /* Lock output for a series of related logs.  Since this is not needed
++#define CPU_LOG_INSTR_CNT (1 << 30)
++
+ #define CPU_LOG_TB_OUT_ASM (1 << 0)
+ #define CPU_LOG_TB_IN_ASM  (1 << 1)
+ #define CPU_LOG_TB_OP      (1 << 2)
 diff --git a/linux-user/syscall.c b/linux-user/syscall.c
-index d60142f069..4db32ea5ba 100644
+index 34760779c8..6bf3be5646 100644
 --- a/linux-user/syscall.c
 +++ b/linux-user/syscall.c
-@@ -7373,4 +7373,6 @@ static abi_long do_syscall1(void *cpu_env, int num, abi_long arg1,
-             TaskState *ts;
+@@ -8253,6 +8253,9 @@ static abi_long do_syscall1(void *cpu_env, int num, abi_long arg1,
+         if (CPU_NEXT(first_cpu)) {
+             TaskState *ts = cpu->opaque;
  
-+            qemu_log_mask(CPU_LOG_INSTR_CNT, "thread exit icount %ld\n", cpu->icount);
++            qemu_log_mask(CPU_LOG_INSTR_CNT, "thread exit icount %ld\n",
++                          cpu->icount);
 +
-             /* Remove the CPU from the list.  */
-             QTAILQ_REMOVE_RCU(&cpus, cpu, node);
-@@ -7392,4 +7394,5 @@ static abi_long do_syscall1(void *cpu_env, int num, abi_long arg1,
+             object_property_set_bool(OBJECT(cpu), "realized", false, NULL);
+             object_unref(OBJECT(cpu));
+             /*
+@@ -8275,6 +8278,8 @@ static abi_long do_syscall1(void *cpu_env, int num, abi_long arg1,
+         }
  
-         cpu_list_unlock();
-+        qemu_log_mask(CPU_LOG_INSTR_CNT, "application exit icount %ld\n", cpu->icount);
+         pthread_mutex_unlock(&clone_lock);
++        qemu_log_mask(CPU_LOG_INSTR_CNT, "application exit icount %ld\n",
++                      cpu->icount);
          preexit_cleanup(cpu_env, arg1);
          _exit(arg1);
-@@ -9372,4 +9375,5 @@ static abi_long do_syscall1(void *cpu_env, int num, abi_long arg1,
+         return 0; /* avoid warning */
+@@ -10238,6 +10243,8 @@ static abi_long do_syscall1(void *cpu_env, int num, abi_long arg1,
+         /* new thread calls */
      case TARGET_NR_exit_group:
          preexit_cleanup(cpu_env, arg1);
-+        qemu_log_mask(CPU_LOG_INSTR_CNT, "application exit icount %ld\n", cpu->icount);
++        qemu_log_mask(CPU_LOG_INSTR_CNT, "application exit icount %ld\n",
++                      cpu->icount);
          return get_errno(exit_group(arg1));
  #endif
+     case TARGET_NR_setdomainname:
+diff --git a/softmmu/cpus.c b/softmmu/cpus.c
+index 1dc20b9dc3..20e8ff9909 100644
+--- a/softmmu/cpus.c
++++ b/softmmu/cpus.c
+@@ -538,6 +538,7 @@ void pause_all_vcpus(void)
+ 
+     qemu_clock_enable(QEMU_CLOCK_VIRTUAL, false);
+     CPU_FOREACH(cpu) {
++        qemu_log_mask(CPU_LOG_INSTR_CNT, "cpu exit icount %ld\n", cpu->icount);
+         if (qemu_cpu_is_self(cpu)) {
+             qemu_cpu_stop(cpu, true);
+         } else {
 diff --git a/util/log.c b/util/log.c
-index 47f2827397..0960a15f06 100644
+index 2ee1500bee..caf8a72e3e 100644
 --- a/util/log.c
 +++ b/util/log.c
-@@ -333,4 +333,6 @@ const QEMULogItem qemu_log_items[] = {
-     { CPU_LOG_PLUGIN, "plugin", "output from TCG plugins\n"},
+@@ -334,6 +334,8 @@ const QEMULogItem qemu_log_items[] = {
  #endif
+     { LOG_STRACE, "strace",
+       "log every user-mode syscall, its input, and its result" },
 +    { CPU_LOG_INSTR_CNT | CPU_LOG_TB_NOCHAIN, "instrc",
 +      "log count of executed instructions" },
      { 0, NULL, NULL },
  };
+ 
+-- 
+2.30.0
+
